@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+ # Brahmo Drug Safety Engine
 
-## Getting Started
+A deterministic drug safety layer that runs BEFORE AI responds to doctor questions, catching dangerous drug interactions, allergy conflicts, and dosing errors.
 
-First, run the development server:
+## Live Demo
+- Select a patient from the list
+- Enter a drug to prescribe
+- Run Safety Check to see deterministic alerts
+- Compare Generic AI vs Safety-Enhanced AI responses side by side
 
-```bash
+## Setup Instructions
+
+### Prerequisites
+- Node.js v18+
+- Git
+
+### Installation
+
+1. Clone the repo:
+git clone https://github.com/1927lanc/brahmo-drug-safety.git
+cd brahmo-drug-safety
+
+2. Install dependencies:
+npm install
+
+3. Create `.env.local` file:
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+GEMINI_API_KEY=your_gemini_key
+
+4. Run the app:
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo Scenarios
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Scenario | Patient | Drug | What it catches |
+|----------|---------|------|-----------------|
+| 1 | Patient 3 - Polypharmacy | Clarithromycin | SEVERE: CYP3A4 → rhabdomyolysis + MODERATE: hypotension |
+| 2 | Patient 1 - Penicillin Allergy | Amoxicillin-Clavulanate | HARD BLOCK: Anaphylaxis allergy |
+| 3 | Patient 7 - ICU Sepsis | Gabapentin | RENAL: eGFR 18.7 → 100mg OD only |
+| 4 | Patient 8 - AF Stroke Risk | Warfarin | CHA₂DS₂-VASc = 6, stroke risk 9.8%/year |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+### Data Flow
+Doctor types question
+→ Safety Engine (~30ms, deterministic):
+├── Drug interaction check (database lookup)
+├── Allergy conflict check (direct + cross-reactivity)
+├── Renal dosing check (eGFR thresholds)
+└── Clinical calculators (eGFR, CHA₂DS₂-VASc)
+→ Safety results → constraint text
+→ Constraint text prepended to AI system prompt
+→ AI responds WITHIN safety constraints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Tech Stack
+- **Frontend:** Next.js 16 + TypeScript + Tailwind CSS
+- **Database:** Supabase (PostgreSQL)
+- **Safety Engine:** Deterministic database lookups (NOT AI)
+- **AI Layer:** Google Gemini API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Database
+- 50 drugs with renal dosing thresholds
+- 30 drug interaction pairs
+- 8 allergy cross-reactivity rules
+- 10 sample patients
 
-## Deploy on Vercel
+### Key Design Decisions
+- Safety engine uses pure database lookups — zero hallucination risk
+- Drugs and interactions cached in memory for <10ms checks
+- Adding new drug = 1 INSERT, zero code changes
+- Adding new interaction = 1 INSERT, zero code changes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+src/
+├── app/
+│   ├── page.tsx              ← Main demo UI
+│   └── api/
+│       ├── safety-check/     ← Safety engine API
+│       └── chat/             ← AI comparison API
+├── lib/
+│   ├── safety-engine.ts      ← DDI, allergy, renal checks
+│   ├── calculators.ts        ← eGFR, CHA₂DS₂-VASc
+│   ├── supabase.ts           ← Database client
+│   └── types.ts              ← TypeScript interfaces
+supabase/
+│   └── schema.sql            ← Database schema
+docs/
+├── architecture.md       ← Architecture decisions
+└── data_sources.md       ← Clinical data sources
